@@ -27,6 +27,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/aws/amazon-vpc-cni-k8s/pkg/utils/logger"
+	"github.com/aws/amazon-vpc-cni-k8s/utils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -34,6 +35,10 @@ import (
 const (
 	// minENILifeTime is the shortest time before we consider deleting a newly created ENI
 	minENILifeTime = 1 * time.Minute
+
+	// envIPCooldownPeriod controls the time that a deleted pod IP address is held before being eligible to be assigned
+	// to a new pod. This holding time gives components that depended on the deleted IP a chance to react to the update.
+	envIPCooldownPeriod = "IP_COOLDOWN_PERIOD"
 
 	// addressCoolingPeriod is used to ensure an IP not get assigned to a Pod if this IP is used by a different Pod
 	// in addressCoolingPeriod
@@ -77,6 +82,9 @@ const backfillNetworkIface = "unknown"
 
 // ErrUnknownPod is an error when there is no pod in data store matching pod name, namespace, sandbox id
 var ErrUnknownPod = errors.New("datastore: unknown pod")
+
+// ipCoolingPeriod is the duration in seconds until an IP address is released, after pod deletion
+var ipCooldownPeriod time.Duration
 
 var (
 	enis = prometheus.NewGauge(
@@ -266,9 +274,19 @@ func (addr AddressInfo) Assigned() bool {
 	return !addr.IPAMKey.IsZero()
 }
 
+// getCooldownPeriod returns the time duration in seconds configured by the IP_COOLING_PERIOD env variable
+func (ds *DataStore) getCooldownPeriod() time.Duration {
+	cooldownVal, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, 30)
+	if err != nil {
+		ds.log.Debugf("Error parsing cooldown period, using default cooldown period: 30")
+		return 30 * time.Second
+	}
+	return time.Duration(cooldownVal) * time.Second
+}
+
 // InCoolingPeriod checks whether an addr is in addressCoolingPeriod
 func (addr AddressInfo) inCoolingPeriod() bool {
-	return time.Since(addr.UnassignedTime) <= addressCoolingPeriod
+	return time.Since(addr.UnassignedTime) <= ipCooldownPeriod
 }
 
 // ENIPool is a collection of ENI, keyed by ENI ID
@@ -341,13 +359,15 @@ func prometheusRegister() {
 // NewDataStore returns DataStore structure
 func NewDataStore(log logger.Logger, backingStore Checkpointer, isPDEnabled bool) *DataStore {
 	prometheusRegister()
-	return &DataStore{
+	ds := &DataStore{
 		eniPool:      make(ENIPool),
 		log:          log,
 		backingStore: backingStore,
 		netLink:      netlinkwrapper.NewNetLink(),
 		isPDEnabled:  isPDEnabled,
 	}
+	ipCooldownPeriod = ds.getCooldownPeriod()
+	return ds
 }
 
 // CheckpointFormatVersion is the version stamp used on stored checkpoints.

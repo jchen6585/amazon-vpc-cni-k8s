@@ -16,6 +16,7 @@ package datastore
 import (
 	"errors"
 	"net"
+	"os"
 	"testing"
 	"time"
 
@@ -927,6 +928,58 @@ func TestGetIPStatsV4(t *testing.T) {
 
 	// wait 30s (cooldown period)
 	time.Sleep(30 * time.Second)
+
+	assert.Equal(t,
+		DataStoreStats{
+			TotalIPs:    2,
+			AssignedIPs: 1,
+			CooldownIPs: 0,
+		},
+		*ds.GetIPStats("4"),
+	)
+}
+
+func TestGetIPStatsV4WithCustomIPCooldown(t *testing.T) {
+	ds := NewDataStore(Testlog, NullCheckpoint{}, false)
+
+	_ = ds.AddENI("eni-1", 1, true, false, false)
+
+	ipv4Addr := net.IPNet{IP: net.ParseIP("1.1.1.1"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	_ = ds.AddIPv4CidrToStore("eni-1", ipv4Addr, false)
+	key1 := IPAMKey{"net0", "sandbox-1", "eth0"}
+	_, _, err := ds.AssignPodIPv4Address(key1, IPAMMetadata{K8SPodNamespace: "default", K8SPodName: "sample-pod-1"})
+	assert.NoError(t, err)
+
+	ipv4Addr = net.IPNet{IP: net.ParseIP("1.1.1.2"), Mask: net.IPv4Mask(255, 255, 255, 255)}
+	_ = ds.AddIPv4CidrToStore("eni-1", ipv4Addr, false)
+	key2 := IPAMKey{"net0", "sandbox-2", "eth0"}
+	_, _, err = ds.AssignPodIPv4Address(key2, IPAMMetadata{K8SPodNamespace: "default", K8SPodName: "sample-pod-2"})
+	assert.NoError(t, err)
+
+	assert.Equal(t,
+		DataStoreStats{
+			TotalIPs:    2,
+			AssignedIPs: 2,
+			CooldownIPs: 0,
+		},
+		*ds.GetIPStats("4"),
+	)
+
+	_, _, _, err = ds.UnassignPodIPAddress(key2)
+	assert.NoError(t, err)
+
+	assert.Equal(t,
+		DataStoreStats{
+			TotalIPs:    2,
+			AssignedIPs: 1,
+			CooldownIPs: 1,
+		},
+		*ds.GetIPStats("4"),
+	)
+	os.Setenv("IP_COOLDOWN_PERIOD", "10")
+	cooldownVal := ds.getCooldownPeriod()
+	assert.Equal(t, cooldownVal, 10)
+	time.Sleep(cooldownVal * time.Second)
 
 	assert.Equal(t,
 		DataStoreStats{
