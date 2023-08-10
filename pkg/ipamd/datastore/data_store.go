@@ -17,7 +17,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -28,7 +27,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/aws/amazon-vpc-cni-k8s/pkg/utils/logger"
-	// "github.com/aws/amazon-vpc-cni-k8s/utils"
+	"github.com/aws/amazon-vpc-cni-k8s/utils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -37,13 +36,9 @@ const (
 	// minENILifeTime is the shortest time before we consider deleting a newly created ENI
 	minENILifeTime = 1 * time.Minute
 
-	// envIPCooldownPeriod controls the time that a deleted pod IP address is held before being eligible to be assigned
-	// to a new pod. This holding time gives components that depended on the deleted IP a chance to react to the update.
+	// envIPCoolingPeriod is used to ensure an IP not get assigned to a Pod if this IP is used by a different Pod
+	// in envIPCoolingPeriod
 	envIPCooldownPeriod = "IP_COOLDOWN_PERIOD"
-
-	// addressCoolingPeriod is used to ensure an IP not get assigned to a Pod if this IP is used by a different Pod
-	// in addressCoolingPeriod
-	addressCoolingPeriod = 30 * time.Second
 
 	// DuplicatedENIError is an error when caller tries to add an duplicate ENI to data store
 	DuplicatedENIError = "data store: duplicate ENI"
@@ -277,27 +272,15 @@ func (addr AddressInfo) Assigned() bool {
 
 // getCooldownPeriod returns the time duration in seconds configured by the IP_COOLING_PERIOD env variable
 func (ds *DataStore) getCooldownPeriod() time.Duration {
-	// cooldownVal, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, 30)
-	// if err != nil {
-	// 	ds.log.Debugf("Error parsing cooldown period, using default cooldown period: 30")
-	// 	return 30 * time.Second
-	// }
-	// return time.Duration(cooldownVal) * time.Second
-	inputStr, found := os.LookupEnv(envIPCooldownPeriod)
-	if !found {
+	cooldownVal, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, 30)
+	if err != nil {
+		ds.log.Debugf("Error parsing cooldown period, using default cooldown period: 30")
 		return 30 * time.Second
 	}
-	if input, err := strconv.Atoi(inputStr); err == nil {
-		if input < 1 {
-			return 30 * time.Second
-		}
-		ds.log.Debugf("Using IP_COOLING_PERIOD %v", input)
-		return time.Duration(input) * time.Second
-	}
-	return 30 * time.Second
+	return time.Duration(cooldownVal) * time.Second
 }
 
-// InCoolingPeriod checks whether an addr is in addressCoolingPeriod
+// InCoolingPeriod checks whether an addr is in ipCoolingPeriod
 func (addr AddressInfo) inCoolingPeriod() bool {
 	return time.Since(addr.UnassignedTime) <= ipCooldownPeriod
 }

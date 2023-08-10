@@ -354,13 +354,13 @@ func validateEnvVars() bool {
 	warmPrefixTarget := utils.GetEnv(envWarmPrefixTarget, "0")
 	minimumIPTarget := utils.GetEnv(envMinIPTarget, "0")
 
-	// Validate that IP_COOLDOWN_PERIOD is a valid integer
+	// Validate that IP_COOLING_PERIOD is a valid integer
 	ipCooldownPeriod, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, defaultIPCooldownPeriod)
 	if err != nil {
 		log.Errorf("IP_COOLDOWN_PERIOD has to be a valid integer")
 		return false
 	}
-	if ipCooldownPeriod < 1 {
+	if ipCooldownPeriod < 0 {
 		log.Errorf("IP_COOLDOWN_PERIOD cannot be smaller than 0")
 		return false
 	}
