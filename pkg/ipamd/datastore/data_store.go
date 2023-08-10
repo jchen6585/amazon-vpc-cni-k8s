@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +28,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/aws/amazon-vpc-cni-k8s/pkg/utils/logger"
-	"github.com/aws/amazon-vpc-cni-k8s/utils"
+	// "github.com/aws/amazon-vpc-cni-k8s/utils"
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 )
@@ -276,12 +277,24 @@ func (addr AddressInfo) Assigned() bool {
 
 // getCooldownPeriod returns the time duration in seconds configured by the IP_COOLING_PERIOD env variable
 func (ds *DataStore) getCooldownPeriod() time.Duration {
-	cooldownVal, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, 30)
-	if err != nil {
-		ds.log.Debugf("Error parsing cooldown period, using default cooldown period: 30")
+	// cooldownVal, err := utils.GetIntAsStringEnvVar(envIPCooldownPeriod, 30)
+	// if err != nil {
+	// 	ds.log.Debugf("Error parsing cooldown period, using default cooldown period: 30")
+	// 	return 30 * time.Second
+	// }
+	// return time.Duration(cooldownVal) * time.Second
+	inputStr, found := os.LookupEnv(envIPCooldownPeriod)
+	if !found {
 		return 30 * time.Second
 	}
-	return time.Duration(cooldownVal) * time.Second
+	if input, err := strconv.Atoi(inputStr); err == nil {
+		if input < 1 {
+			return 30 * time.Second
+		}
+		ds.log.Debugf("Using IP_COOLING_PERIOD %v", input)
+		return time.Duration(input) * time.Second
+	}
+	return 30 * time.Second
 }
 
 // InCoolingPeriod checks whether an addr is in addressCoolingPeriod
