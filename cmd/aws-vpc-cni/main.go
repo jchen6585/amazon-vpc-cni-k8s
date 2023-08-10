@@ -360,7 +360,7 @@ func validateEnvVars() bool {
 		log.Errorf("IP_COOLDOWN_PERIOD has to be a valid integer")
 		return false
 	}
-	if ipCooldownPeriod < 0 {
+	if ipCooldownPeriod < 1 {
 		log.Errorf("IP_COOLDOWN_PERIOD cannot be smaller than 0")
 		return false
 	}
