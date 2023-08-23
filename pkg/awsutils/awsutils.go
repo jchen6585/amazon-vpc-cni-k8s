@@ -277,11 +277,18 @@ type ENIMetadata struct {
 	IPv6Prefixes []*ec2.Ipv6PrefixSpecification
 }
 
+type NetworkCard struct {
+	MaximumNetworkInterfaces int64
+	NetworkCardIndex int64
+}
+
 // InstanceTypeLimits keeps track of limits for an instance type
 type InstanceTypeLimits struct {
 	ENILimit       int
 	IPv4Limit      int
 	HypervisorType string
+	DefaultNetworkCardIndex int
+	NetworkCards []NetworkCard
 	IsBareMetal    bool
 }
 
@@ -1410,14 +1417,24 @@ func (cache *EC2InstanceMetadataCache) FetchInstanceTypeLimits() error {
 	instanceType := aws.StringValue(info.InstanceType)
 	eniLimit := int(aws.Int64Value(info.NetworkInfo.MaximumNetworkInterfaces))
 	ipv4Limit := int(aws.Int64Value(info.NetworkInfo.Ipv4AddressesPerInterface))
+	defaultNetworkCardIndex := int(aws.Int64Value(info.NetworkInfo.DefaultNetworkCardIndex))
 	hypervisorType := aws.StringValue(info.Hypervisor)
 	isBareMetalInstance := aws.BoolValue(info.BareMetal)
+	networkCards := make([]NetworkCard, *info.NetworkInfo.MaximumNetworkCards)
+	for idx := 0; idx < len(networkCards); idx += 1 {
+		networkCards[idx] = NetworkCard{
+			MaximumNetworkInterfaces: *info.NetworkInfo.NetworkCards[idx].MaximumNetworkInterfaces,
+			NetworkCardIndex: *info.NetworkInfo.NetworkCards[idx].NetworkCardIndex,
+		}
+	}
 	//Not checking for empty hypervisorType since have seen certain instances not getting this filled.
 	if instanceType != "" && eniLimit > 0 && ipv4Limit > 0 {
 		eniLimits = InstanceTypeLimits{
 			ENILimit:       eniLimit,
 			IPv4Limit:      ipv4Limit,
 			HypervisorType: hypervisorType,
+			NetworkCards: networkCards,
+			DefaultNetworkCardIndex: defaultNetworkCardIndex,
 			IsBareMetal:    isBareMetalInstance,
 		}
 

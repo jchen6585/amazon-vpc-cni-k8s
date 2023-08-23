@@ -32,7 +32,8 @@ import (
 	"github.com/aws/aws-sdk-go/service/ec2"
 )
 
-const ipLimitFileName = "pkg/awsutils/vpc_ip_resource_limit.go"
+// const ipLimitFileName = "pkg/awsutils/vpc_ip_resource_limit.go"
+const ipLimitFileName = "pkg/awsutils/temp.go"
 const eniMaxPodsFileName = "misc/eni-max-pods.txt"
 
 var log = logger.DefaultLogger()
@@ -169,13 +170,21 @@ func describeInstanceTypes(region string, eniLimitMap map[string]awsutils.Instan
 			ipv4Limit := int(aws.Int64Value(info.NetworkInfo.Ipv4AddressesPerInterface))
 			hypervisorType := aws.StringValue(info.Hypervisor)
 			isBareMetalInstance := aws.BoolValue(info.BareMetal)
-			if instanceType != "" && eniLimit > 0 && ipv4Limit > 0 {
-				limits := awsutils.InstanceTypeLimits{ENILimit: eniLimit, IPv4Limit: ipv4Limit, HypervisorType: hypervisorType,
-					IsBareMetal: isBareMetalInstance}
-				if existingLimits, contains := eniLimitMap[instanceType]; contains && existingLimits != limits {
-					// this should never happen
-					log.Fatalf("A previous region has different limits for instanceType=%s than region=%s", instanceType, region)
+			defaultNetworkCardIndex := int(aws.Int64Value(info.NetworkInfo.DefaultNetworkCardIndex))
+			networkCards := make([]awsutils.NetworkCard, *info.NetworkInfo.MaximumNetworkCards)
+			for idx := 0; idx < len(networkCards); idx += 1 {
+				networkCards[idx] = awsutils.NetworkCard{
+					MaximumNetworkInterfaces: *info.NetworkInfo.NetworkCards[idx].MaximumNetworkInterfaces,
+					NetworkCardIndex: *info.NetworkInfo.NetworkCards[idx].NetworkCardIndex,
 				}
+			}
+			if instanceType != "" && eniLimit > 0 && ipv4Limit > 0 {
+				limits := awsutils.InstanceTypeLimits{ENILimit: eniLimit, IPv4Limit: ipv4Limit, NetworkCards: networkCards, DefaultNetworkCardIndex: defaultNetworkCardIndex, HypervisorType: hypervisorType,
+					IsBareMetal: isBareMetalInstance}
+				// if existingLimits, contains := eniLimitMap[instanceType]; contains && existingLimits != limits {
+				// 	// this should never happen
+				// 	log.Fatalf("A previous region has different limits for instanceType=%s than region=%s", instanceType, region)
+				// }
 				eniLimitMap[instanceType] = limits
 			}
 		}
