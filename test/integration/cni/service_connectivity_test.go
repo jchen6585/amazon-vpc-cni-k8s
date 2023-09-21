@@ -96,6 +96,9 @@ var _ = Describe("[CANARY] test service connectivity", func() {
 			CreateService(context.Background(), service)
 		Expect(err).ToNot(HaveOccurred())
 
+		serv, _ := f.K8sResourceManagers.ServiceManager().GetService(context.Background(), service.GetNamespace(), service.GetName())
+		fmt.Fprintf(GinkgoWriter, "%v", serv.Status)
+
 		fmt.Fprintf(GinkgoWriter, "created service\n: %+v\n", service.Status)
 
 		By("sleeping for some time to allow service to become ready")
