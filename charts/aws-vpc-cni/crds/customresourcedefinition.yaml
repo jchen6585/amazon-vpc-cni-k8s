@@ -41,6 +41,10 @@ spec:
           spec:
             description: ENIConfigSpec defines the desired state of ENIConfig
             properties:
+              secondarySubnets:
+                items:
+                  type: string
+                type: array
               securityGroups:
                 items:
                   type: string
