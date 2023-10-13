@@ -867,7 +867,8 @@ func (c *IPAMContext) updateLastNodeIPPoolAction() {
 
 func (c *IPAMContext) tryAllocateENI(ctx context.Context) error {
 	var securityGroups []*string
-	var subnet string
+	// var subnet string
+	var subnets []string
 
 	if c.useCustomNetworking {
 		eniCfg, err := eniconfig.MyENIConfig(ctx, c.k8sClient)
@@ -881,10 +882,17 @@ func (c *IPAMContext) tryAllocateENI(ctx context.Context) error {
 			log.Debugf("Found security-group id: %s", sgID)
 			securityGroups = append(securityGroups, aws.String(sgID))
 		}
-		subnet = eniCfg.Subnet
+		// subnets = eniCfg.Subnet
+		log.Debugf("Found primary subnet: %s", eniCfg.Subnet)
+		subnets = append(subnets, eniCfg.Subnet)
+		for _, net := range eniCfg.SecondarySubnets {
+			log.Debugf("Found secondary subnet: %s", net)
+			subnets = append(subnets, net)
+		}
 	}
 
-	eni, err := c.awsClient.AllocENI(c.useCustomNetworking, securityGroups, subnet)
+	// eni, err := c.awsClient.AllocENI(c.useCustomNetworking, securityGroups, subnet)
+	eni, err := c.awsClient.AllocENI(c.useCustomNetworking, securityGroups, subnets)
 	if err != nil {
 		log.Errorf("Failed to increase pool size due to not able to allocate ENI %v", err)
 		ipamdErrInc("increaseIPPoolAllocENI")
