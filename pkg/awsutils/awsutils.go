@@ -832,7 +832,11 @@ func (cache *EC2InstanceMetadataCache) createENI(useCustomCfg bool, sg []*string
 	if ipLimit < needIPs {
 		needIPs = ipLimit
 	}
-
+	// If we don't need any more IPs, don't create ENI. It should never be the case.
+	if needIPs < 1 {
+		log.Info("No more IPs are needed. Will not create ENI.")
+		return "", nil
+	}
 	log.Infof("Trying to allocate %d IP addresses on new ENI", needIPs)
 	log.Debugf("PD enabled - %t", cache.enablePrefixDelegation)
 	input := &ec2.CreateNetworkInterfaceInput{}
