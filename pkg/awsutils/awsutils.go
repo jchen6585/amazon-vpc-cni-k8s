@@ -123,7 +123,7 @@ var (
 // APIs defines interfaces calls for adding/getting/deleting ENIs/secondary IPs. The APIs are not thread-safe.
 type APIs interface {
 	// AllocENI creates an ENI and attaches it to the instance
-	AllocENI(useCustomCfg bool, sg []*string, subnet string, numIPs int) (eni string, err error)
+	AllocENI(useCustomCfg bool, sg []*string, subnet []*string, numIPs int) (eni string, err error)
 
 	// FreeENI detaches ENI interface and deletes it
 	FreeENI(eniName string) error
@@ -740,7 +740,8 @@ func (cache *EC2InstanceMetadataCache) awsGetFreeDeviceNumber() (int, error) {
 
 // AllocENI creates an ENI and attaches it to the instance
 // returns: newly created ENI ID
-func (cache *EC2InstanceMetadataCache) AllocENI(useCustomCfg bool, sg []*string, subnet string, numIPs int) (string, error) {
+func (cache *EC2InstanceMetadataCache) AllocENI(useCustomCfg bool, sg []*string, subnet []*string, numIPs int) (string, error) {
+
 	eniID, err := cache.createENI(useCustomCfg, sg, subnet, numIPs)
 	if err != nil {
 		return "", errors.Wrap(err, "AllocENI: failed to create ENI")

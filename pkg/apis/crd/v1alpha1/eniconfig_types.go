@@ -26,7 +26,7 @@ import (
 // ENIConfigSpec defines the desired state of ENIConfig
 type ENIConfigSpec struct {
 	SecurityGroups []string `json:"securityGroups"`
-	Subnet         string   `json:"subnet"`
+	Subnets        []string `json:"subnets"`
 }
 
 // ENIConfigStatus defines the observed state of ENIConfig
