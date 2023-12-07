@@ -82,6 +82,13 @@ Test info:
   - No existing node group should be present. The test creates a self managed node group with the reduced MAX_POD value.
   - Pass `custom-networking-cidr-range` flag with *allowed* VPC CIDR that does not conflict with an existing one. So if existing VPC CIDR is `192.168.0.0/16`, you can use `custom-networking-cidr-range=100.64.0.0/16`. You can go to your cluster VPC to check existing/allowed CIDRs.
 
+### ENI Subnet Selection
+
+The ENI Subnet Selection test suite validates ENI allocation by making sure the tagged subnet with the largest number of free IPs is selected
+
+Test info:
+	- Pass `secondary-cidr-range` flag with *allowed* VPC CIDR that does not conflict with an existing one. So if existing VPC CIDR is `192.168.0.0/16`, you can use `secondary-cidr-range=100.64.0.0/16`. You can go to your cluster VPC to check existing/allowed CIDRs.
+
 ### SNAT tests
 
 SNAT tests cover pod source NAT behavior with various deployment scenarios.
