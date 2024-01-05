@@ -529,7 +529,11 @@ func (c *IPAMContext) nodeInit() error {
 
 	// On node init, check if datastore pool needs to be increased. If so, attach CIDRs from existing ENIs and attach new ENIs.
 	if !c.disableENIProvisioning && c.isDatastorePoolTooLow() {
-		if err := c.increaseDatastorePool(ctx); err != nil {
+		increased, err := c.increaseDatastorePool(ctx)
+		for increased {
+			increased, err = c.increaseDatastorePool(ctx)
+		}
+		if err != nil {
 			// Note that the only error currently returned by increaseDatastorePool is an error attaching CIDRs (other than insufficient IPs)
 			podENIErrInc("nodeInit")
 			return errors.New("error while trying to increase datastore pool")
@@ -635,7 +639,10 @@ func (c *IPAMContext) updateIPPoolIfRequired(ctx context.Context) {
 	}
 
 	if c.isDatastorePoolTooLow() {
-		c.increaseDatastorePool(ctx)
+		increased, _ := c.increaseDatastorePool(ctx)
+		for increased {
+			increased, _ = c.increaseDatastorePool(ctx)
+		}
 	} else if c.isDatastorePoolTooHigh() {
 		c.decreaseDatastorePool(decreaseIPPoolInterval)
 	}
@@ -746,7 +753,7 @@ func (c *IPAMContext) tryUnassignCidrsFromAll() {
 	}
 }
 
-func (c *IPAMContext) increaseDatastorePool(ctx context.Context) error {
+func (c *IPAMContext) increaseDatastorePool(ctx context.Context) (bool, error) {
 	log.Debug("Starting to increase pool size")
 	prometheusmetrics.IpamdActionsInprogress.WithLabelValues("increaseDatastorePool").Add(float64(1))
 	defer prometheusmetrics.IpamdActionsInprogress.WithLabelValues("increaseDatastorePool").Sub(float64(1))
@@ -754,30 +761,30 @@ func (c *IPAMContext) increaseDatastorePool(ctx context.Context) error {
 	short, _, warmIPTargetDefined := c.datastoreTargetState()
 	if warmIPTargetDefined && short == 0 {
 		log.Debugf("Skipping increase Datastore pool, warm target reached")
-		return nil
+		return false, nil
 	}
 
 	if !warmIPTargetDefined {
 		shortPrefix, warmTargetDefined := c.datastorePrefixTargetState()
 		if warmTargetDefined && shortPrefix == 0 {
 			log.Debugf("Skipping increase Datastore pool, warm prefix target reached")
-			return nil
+			return false, nil
 		}
 	}
 
 	if c.isTerminating() {
 		log.Debug("AWS CNI is terminating, will not try to attach any new IPs or ENIs right now")
-		return nil
+		return false, nil
 	}
 	if !c.manageENIsNonScheduleable && c.isNodeNonSchedulable() {
 		log.Debug("AWS CNI is on a non schedulable node, will not try to attach any new IPs or ENIs right now")
-		return nil
+		return false, nil
 	}
 
 	// Try to add more Cidrs to existing ENIs first.
 	if c.inInsufficientCidrCoolingPeriod() {
 		log.Debugf("Recently we had InsufficientCidr error hence will wait for %v before retrying", insufficientCidrErrorCooldown)
-		return nil
+		return false, nil
 	}
 
 	increasedPool, err := c.tryAssignCidrs()
@@ -785,10 +792,10 @@ func (c *IPAMContext) increaseDatastorePool(ctx context.Context) error {
 		if containsInsufficientCIDRsOrSubnetIPs(err) {
 			log.Errorf("Unable to attach IPs/Prefixes for the ENI, subnet doesn't seem to have enough IPs/Prefixes. Consider using new subnet or carve a reserved range using create-subnet-cidr-reservation")
 			c.lastInsufficientCidrError = time.Now()
-			return nil
+			return false, nil
 		}
 		log.Errorf(err.Error())
-		return err
+		return false, err
 	}
 	if increasedPool {
 		c.updateLastNodeIPPoolAction()
@@ -796,6 +803,7 @@ func (c *IPAMContext) increaseDatastorePool(ctx context.Context) error {
 		// If we did not add any IPs, try to allocate an ENI.
 		if c.hasRoomForEni() {
 			if err = c.tryAllocateENI(ctx); err == nil {
+				increasedPool = true
 				c.updateLastNodeIPPoolAction()
 			} else {
 				// Note that no error is returned if ENI allocation fails. This is because ENI allocation failure should not cause node to be "NotReady".
@@ -805,7 +813,7 @@ func (c *IPAMContext) increaseDatastorePool(ctx context.Context) error {
 			log.Debugf("Skipping ENI allocation as the max ENI limit is already reached")
 		}
 	}
-	return nil
+	return increasedPool, nil
 }
 
 func (c *IPAMContext) updateLastNodeIPPoolAction() {
